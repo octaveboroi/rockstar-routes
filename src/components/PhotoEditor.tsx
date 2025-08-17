@@ -1,0 +1,315 @@
+import { useState, useRef, useEffect, useCallback } from "react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Save, ZoomIn, ZoomOut, RotateCcw } from "lucide-react";
+import { ClimbingPuzzle } from "@/pages/AdminPanel";
+import { toast } from "sonner";
+
+interface PhotoEditorProps {
+  puzzle: ClimbingPuzzle;
+  onSave: (puzzle: ClimbingPuzzle) => void;
+}
+
+interface Circle {
+  id: string;
+  x: number;
+  y: number;
+  number: number;
+}
+
+interface ViewState {
+  scale: number;
+  offsetX: number;
+  offsetY: number;
+}
+
+export const PhotoEditor = ({ puzzle, onSave }: PhotoEditorProps) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const imageRef = useRef<HTMLImageElement>(null);
+  
+  const [circles, setCircles] = useState<Circle[]>(puzzle.circles || []);
+  const [viewState, setViewState] = useState<ViewState>({
+    scale: 1,
+    offsetX: 0,
+    offsetY: 0,
+  });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [selectedCircle, setSelectedCircle] = useState<string | null>(null);
+  const [imageLoaded, setImageLoaded] = useState(false);
+
+  // Load and setup image
+  useEffect(() => {
+    const img = new Image();
+    img.onload = () => {
+      imageRef.current = img;
+      setImageLoaded(true);
+      // Fit image to container initially
+      if (containerRef.current) {
+        const container = containerRef.current;
+        const scaleX = container.clientWidth / img.naturalWidth;
+        const scaleY = container.clientHeight / img.naturalHeight;
+        const scale = Math.min(scaleX, scaleY, 1) * 0.8; // 80% of container
+        setViewState({
+          scale,
+          offsetX: (container.clientWidth - img.naturalWidth * scale) / 2,
+          offsetY: (container.clientHeight - img.naturalHeight * scale) / 2,
+        });
+      }
+    };
+    img.src = puzzle.imageUrl;
+  }, [puzzle.imageUrl]);
+
+  // Draw everything on canvas
+  const draw = useCallback(() => {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    const img = imageRef.current;
+    
+    if (!canvas || !ctx || !img || !imageLoaded) return;
+
+    // Set canvas size to container size
+    const container = containerRef.current;
+    if (container) {
+      canvas.width = container.clientWidth;
+      canvas.height = container.clientHeight;
+    }
+
+    // Clear canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Draw image
+    ctx.drawImage(
+      img,
+      viewState.offsetX,
+      viewState.offsetY,
+      img.naturalWidth * viewState.scale,
+      img.naturalHeight * viewState.scale
+    );
+
+    // Draw circles
+    circles.forEach((circle) => {
+      const x = viewState.offsetX + circle.x * viewState.scale;
+      const y = viewState.offsetY + circle.y * viewState.scale;
+      const radius = 20 * viewState.scale;
+
+      // Circle background
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, 2 * Math.PI);
+      ctx.fillStyle = selectedCircle === circle.id ? '#ff6b35' : '#e74c3c';
+      ctx.fill();
+      
+      // Circle border
+      ctx.strokeStyle = selectedCircle === circle.id ? '#fff' : '#c0392b';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      // Number text
+      ctx.fillStyle = '#fff';
+      ctx.font = `bold ${14 * viewState.scale}px Arial`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(circle.number.toString(), x, y);
+    });
+  }, [circles, viewState, selectedCircle, imageLoaded]);
+
+  // Redraw when state changes
+  useEffect(() => {
+    draw();
+  }, [draw]);
+
+  // Handle canvas click
+  const handleCanvasClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas || !imageLoaded) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const clickX = event.clientX - rect.left;
+    const clickY = event.clientY - rect.top;
+
+    // Check if clicking on existing circle
+    const clickedCircle = circles.find((circle) => {
+      const x = viewState.offsetX + circle.x * viewState.scale;
+      const y = viewState.offsetY + circle.y * viewState.scale;
+      const radius = 20 * viewState.scale;
+      const distance = Math.sqrt((clickX - x) ** 2 + (clickY - y) ** 2);
+      return distance <= radius;
+    });
+
+    if (clickedCircle) {
+      setSelectedCircle(selectedCircle === clickedCircle.id ? null : clickedCircle.id);
+    } else {
+      // Add new circle
+      const imageX = (clickX - viewState.offsetX) / viewState.scale;
+      const imageY = (clickY - viewState.offsetY) / viewState.scale;
+      
+      // Check if click is within image bounds
+      const img = imageRef.current;
+      if (img && imageX >= 0 && imageX <= img.naturalWidth && imageY >= 0 && imageY <= img.naturalHeight) {
+        const newCircle: Circle = {
+          id: Date.now().toString(),
+          x: imageX,
+          y: imageY,
+          number: circles.length + 1,
+        };
+        setCircles([...circles, newCircle]);
+        setSelectedCircle(newCircle.id);
+        toast("Hold added!");
+      }
+    }
+  };
+
+  // Handle mouse down for panning
+  const handleMouseDown = (event: React.MouseEvent<HTMLCanvasElement>) => {
+    if (event.button === 2 || event.ctrlKey) { // Right click or Ctrl+click for panning
+      setIsDragging(true);
+      setDragStart({ x: event.clientX - viewState.offsetX, y: event.clientY - viewState.offsetY });
+    }
+  };
+
+  // Handle mouse move
+  const handleMouseMove = (event: React.MouseEvent<HTMLCanvasElement>) => {
+    if (isDragging) {
+      setViewState(prev => ({
+        ...prev,
+        offsetX: event.clientX - dragStart.x,
+        offsetY: event.clientY - dragStart.y,
+      }));
+    }
+  };
+
+  // Handle mouse up
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  // Handle wheel for zooming
+  const handleWheel = (event: React.WheelEvent<HTMLCanvasElement>) => {
+    event.preventDefault();
+    const delta = event.deltaY > 0 ? 0.9 : 1.1;
+    const newScale = Math.max(0.1, Math.min(5, viewState.scale * delta));
+    
+    // Zoom towards cursor position
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (rect) {
+      const mouseX = event.clientX - rect.left;
+      const mouseY = event.clientY - rect.top;
+      
+      setViewState(prev => ({
+        scale: newScale,
+        offsetX: mouseX - (mouseX - prev.offsetX) * (newScale / prev.scale),
+        offsetY: mouseY - (mouseY - prev.offsetY) * (newScale / prev.scale),
+      }));
+    }
+  };
+
+  const handleZoomIn = () => {
+    setViewState(prev => ({ ...prev, scale: Math.min(5, prev.scale * 1.2) }));
+  };
+
+  const handleZoomOut = () => {
+    setViewState(prev => ({ ...prev, scale: Math.max(0.1, prev.scale * 0.8) }));
+  };
+
+  const handleReset = () => {
+    if (containerRef.current && imageRef.current) {
+      const container = containerRef.current;
+      const img = imageRef.current;
+      const scaleX = container.clientWidth / img.naturalWidth;
+      const scaleY = container.clientHeight / img.naturalHeight;
+      const scale = Math.min(scaleX, scaleY, 1) * 0.8;
+      setViewState({
+        scale,
+        offsetX: (container.clientWidth - img.naturalWidth * scale) / 2,
+        offsetY: (container.clientHeight - img.naturalHeight * scale) / 2,
+      });
+    }
+  };
+
+  const handleDeleteSelected = () => {
+    if (selectedCircle) {
+      setCircles(prev => prev.filter(c => c.id !== selectedCircle));
+      setSelectedCircle(null);
+      toast("Hold removed!");
+    }
+  };
+
+  const handleSave = () => {
+    const updatedPuzzle: ClimbingPuzzle = {
+      ...puzzle,
+      circles: circles.map((circle, index) => ({
+        ...circle,
+        number: index + 1, // Renumber sequentially
+      })),
+    };
+    onSave(updatedPuzzle);
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Controls */}
+      <Card>
+        <CardContent className="flex flex-wrap items-center gap-2 p-4">
+          <Button onClick={handleZoomIn} size="sm" variant="outline">
+            <ZoomIn className="h-4 w-4" />
+          </Button>
+          <Button onClick={handleZoomOut} size="sm" variant="outline">
+            <ZoomOut className="h-4 w-4" />
+          </Button>
+          <Button onClick={handleReset} size="sm" variant="outline">
+            <RotateCcw className="h-4 w-4" />
+          </Button>
+          {selectedCircle && (
+            <Button onClick={handleDeleteSelected} size="sm" variant="destructive">
+              Delete Selected
+            </Button>
+          )}
+          <div className="flex-1" />
+          <div className="text-sm text-muted-foreground">
+            Holds: {circles.length} | Zoom: {Math.round(viewState.scale * 100)}%
+          </div>
+          <Button onClick={handleSave} className="bg-success-green hover:bg-success-green/90">
+            <Save className="h-4 w-4 mr-2" />
+            Save Puzzle
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Canvas */}
+      <Card>
+        <CardContent className="p-0">
+          <div
+            ref={containerRef}
+            className="relative h-[60vh] sm:h-[70vh] overflow-hidden"
+            style={{ touchAction: 'none' }}
+          >
+            <canvas
+              ref={canvasRef}
+              className="absolute inset-0 cursor-crosshair"
+              onClick={handleCanvasClick}
+              onMouseDown={handleMouseDown}
+              onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={handleMouseUp}
+              onWheel={handleWheel}
+              onContextMenu={(e) => e.preventDefault()}
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Instructions */}
+      <Card>
+        <CardContent className="p-4">
+          <div className="text-sm text-muted-foreground space-y-1">
+            <p><strong>Click</strong> to add/select holds</p>
+            <p><strong>Right-click + drag</strong> or <strong>Ctrl + drag</strong> to pan</p>
+            <p><strong>Scroll</strong> to zoom in/out</p>
+            <p><strong>Selected hold</strong> appears in orange</p>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+};
