@@ -18,6 +18,7 @@ export interface ClimbingPuzzle {
     x: number;
     y: number;
     number: number;
+    radius?: number; // Add radius property
   }>;
   createdAt: Date;
 }

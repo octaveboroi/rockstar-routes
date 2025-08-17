@@ -42,6 +42,8 @@ Earth tones and climbing-inspired colors. All colors MUST be HSL.
     /* Custom climbing theme colors */
     --climbing-red: 0 85% 55%;
     --climbing-red-foreground: 0 0% 100%;
+    --climbing-red-alpha: 0 85% 55% / 0.7;
+    --climbing-red-selected: 14 85% 55% / 0.8;
     --rock-gray: 24 8% 75%;
     --rock-dark: 24 15% 25%;
     --earth-brown: 35 35% 45%;
@@ -111,6 +113,8 @@ Earth tones and climbing-inspired colors. All colors MUST be HSL.
 
     --climbing-red: 0 85% 55%;
     --climbing-red-foreground: 0 0% 100%;
+    --climbing-red-alpha: 0 85% 55% / 0.7;
+    --climbing-red-selected: 14 85% 55% / 0.8;
     --rock-gray: 24 10% 35%;
     --rock-dark: 24 20% 15%;
     --earth-brown: 35 35% 35%;
