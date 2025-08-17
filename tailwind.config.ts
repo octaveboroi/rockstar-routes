@@ -52,14 +52,6 @@ export default {
 					DEFAULT: 'hsl(var(--card))',
 					foreground: 'hsl(var(--card-foreground))'
 				},
-				'climbing-red': {
-					DEFAULT: 'hsl(var(--climbing-red))',
-					foreground: 'hsl(var(--climbing-red-foreground))'
-				},
-				'rock-gray': 'hsl(var(--rock-gray))',
-				'rock-dark': 'hsl(var(--rock-dark))',
-				'earth-brown': 'hsl(var(--earth-brown))',
-				'success-green': 'hsl(var(--success-green))',
 				sidebar: {
 					DEFAULT: 'hsl(var(--sidebar-background))',
 					foreground: 'hsl(var(--sidebar-foreground))',
