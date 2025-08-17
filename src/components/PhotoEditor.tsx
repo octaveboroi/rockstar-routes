@@ -15,7 +15,6 @@ interface Circle {
   x: number;
   y: number;
   number: number;
-  radius?: number; // Add radius property
 }
 
 interface ViewState {
@@ -29,10 +28,7 @@ export const PhotoEditor = ({ puzzle, onSave }: PhotoEditorProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
   
-  const [circles, setCircles] = useState<Circle[]>(puzzle.circles.map(c => ({
-    ...c,
-    radius: c.radius || 20 // Default radius if not set
-  })) || []);
+  const [circles, setCircles] = useState<Circle[]>(puzzle.circles || []);
   const [viewState, setViewState] = useState<ViewState>({
     scale: 1,
     offsetX: 0,
@@ -42,8 +38,6 @@ export const PhotoEditor = ({ puzzle, onSave }: PhotoEditorProps) => {
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [selectedCircle, setSelectedCircle] = useState<string | null>(null);
   const [imageLoaded, setImageLoaded] = useState(false);
-  const [isDraggingCircle, setIsDraggingCircle] = useState(false);
-  const [isResizingCircle, setIsResizingCircle] = useState(false);
 
   // Load and setup image
   useEffect(() => {
@@ -94,55 +88,29 @@ export const PhotoEditor = ({ puzzle, onSave }: PhotoEditorProps) => {
       img.naturalHeight * viewState.scale
     );
 
-    // Draw circles with transparency
+    // Draw circles
     circles.forEach((circle) => {
       const x = viewState.offsetX + circle.x * viewState.scale;
       const y = viewState.offsetY + circle.y * viewState.scale;
-      const radius = (circle.radius || 20) * viewState.scale;
+      const radius = 20 * viewState.scale;
 
-      // Circle background with transparency
+      // Circle background
       ctx.beginPath();
       ctx.arc(x, y, radius, 0, 2 * Math.PI);
-      
-      if (selectedCircle === circle.id) {
-        ctx.fillStyle = 'hsla(14, 85%, 55%, 0.8)'; // Selected color with transparency
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 3;
-      } else {
-        ctx.fillStyle = 'hsla(0, 85%, 55%, 0.7)'; // Regular color with transparency
-        ctx.strokeStyle = 'hsla(195, 62%, 30%, 0.9)';
-        ctx.lineWidth = 2;
-      }
-      
+      ctx.fillStyle = selectedCircle === circle.id ? '#ff6b35' : '#e74c3c';
       ctx.fill();
+      
+      // Circle border
+      ctx.strokeStyle = selectedCircle === circle.id ? '#fff' : '#c0392b';
+      ctx.lineWidth = 2;
       ctx.stroke();
 
       // Number text
       ctx.fillStyle = '#fff';
-      ctx.font = `bold ${Math.max(12, 14 * viewState.scale)}px Arial`;
+      ctx.font = `bold ${14 * viewState.scale}px Arial`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(circle.number.toString(), x, y);
-
-      // Selection highlight
-      if (selectedCircle === circle.id) {
-        ctx.beginPath();
-        ctx.arc(x, y, radius + 8, 0, 2 * Math.PI);
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 2;
-        ctx.setLineDash([5, 5]);
-        ctx.stroke();
-        ctx.setLineDash([]);
-
-        // Resize handle for selected circle
-        ctx.beginPath();
-        ctx.arc(x + radius + 8, y, 6, 0, 2 * Math.PI);
-        ctx.fillStyle = '#fff';
-        ctx.fill();
-        ctx.strokeStyle = 'hsla(14, 85%, 55%, 1)';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-      }
     });
   }, [circles, viewState, selectedCircle, imageLoaded]);
 
@@ -151,7 +119,7 @@ export const PhotoEditor = ({ puzzle, onSave }: PhotoEditorProps) => {
     draw();
   }, [draw]);
 
-  // Handle canvas click and interaction
+  // Handle canvas click
   const handleCanvasClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
     if (!canvas || !imageLoaded) return;
@@ -160,29 +128,11 @@ export const PhotoEditor = ({ puzzle, onSave }: PhotoEditorProps) => {
     const clickX = event.clientX - rect.left;
     const clickY = event.clientY - rect.top;
 
-    // Check if clicking on resize handle first
-    if (selectedCircle) {
-      const selectedCircleData = circles.find(c => c.id === selectedCircle);
-      if (selectedCircleData) {
-        const circleX = viewState.offsetX + selectedCircleData.x * viewState.scale;
-        const circleY = viewState.offsetY + selectedCircleData.y * viewState.scale;
-        const circleRadius = (selectedCircleData.radius || 20) * viewState.scale;
-        const handleX = circleX + circleRadius + 8;
-        const handleY = circleY;
-        const handleDistance = Math.sqrt((clickX - handleX) ** 2 + (clickY - handleY) ** 2);
-        
-        if (handleDistance <= 6) {
-          // Clicked on resize handle
-          return;
-        }
-      }
-    }
-
     // Check if clicking on existing circle
     const clickedCircle = circles.find((circle) => {
       const x = viewState.offsetX + circle.x * viewState.scale;
       const y = viewState.offsetY + circle.y * viewState.scale;
-      const radius = (circle.radius || 20) * viewState.scale;
+      const radius = 20 * viewState.scale;
       const distance = Math.sqrt((clickX - x) ** 2 + (clickY - y) ** 2);
       return distance <= radius;
     });
@@ -202,7 +152,6 @@ export const PhotoEditor = ({ puzzle, onSave }: PhotoEditorProps) => {
           x: imageX,
           y: imageY,
           number: circles.length + 1,
-          radius: 20, // Default radius
         };
         setCircles([...circles, newCircle]);
         setSelectedCircle(newCircle.id);
@@ -211,91 +160,17 @@ export const PhotoEditor = ({ puzzle, onSave }: PhotoEditorProps) => {
     }
   };
 
-  // Handle mouse down for panning and circle dragging
+  // Handle mouse down for panning
   const handleMouseDown = (event: React.MouseEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
-    if (!canvas || !imageLoaded) return;
-
-    const rect = canvas.getBoundingClientRect();
-    const mouseX = event.clientX - rect.left;
-    const mouseY = event.clientY - rect.top;
-
-    // Check if clicking on resize handle of selected circle
-    if (selectedCircle) {
-      const selectedCircleData = circles.find(c => c.id === selectedCircle);
-      if (selectedCircleData) {
-        const circleX = viewState.offsetX + selectedCircleData.x * viewState.scale;
-        const circleY = viewState.offsetY + selectedCircleData.y * viewState.scale;
-        const circleRadius = (selectedCircleData.radius || 20) * viewState.scale;
-        const handleX = circleX + circleRadius + 8;
-        const handleY = circleY;
-        const handleDistance = Math.sqrt((mouseX - handleX) ** 2 + (mouseY - handleY) ** 2);
-        
-        if (handleDistance <= 6) {
-          setIsResizingCircle(true);
-          setDragStart({ x: mouseX, y: mouseY });
-          return;
-        }
-      }
-    }
-
-    // Check if clicking on a circle for dragging
-    const clickedCircle = circles.find((circle) => {
-      const x = viewState.offsetX + circle.x * viewState.scale;
-      const y = viewState.offsetY + circle.y * viewState.scale;
-      const radius = (circle.radius || 20) * viewState.scale;
-      const distance = Math.sqrt((mouseX - x) ** 2 + (mouseY - y) ** 2);
-      return distance <= radius;
-    });
-
-    if (clickedCircle && selectedCircle === clickedCircle.id) {
-      // Start dragging the selected circle
-      setIsDraggingCircle(true);
-      setDragStart({ x: mouseX, y: mouseY });
-    } else if (event.button === 2 || event.ctrlKey) { 
-      // Right click or Ctrl+click for panning
+    if (event.button === 2 || event.ctrlKey) { // Right click or Ctrl+click for panning
       setIsDragging(true);
       setDragStart({ x: event.clientX - viewState.offsetX, y: event.clientY - viewState.offsetY });
     }
   };
 
-  // Handle mouse move for panning and circle dragging
+  // Handle mouse move
   const handleMouseMove = (event: React.MouseEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const rect = canvas.getBoundingClientRect();
-    const mouseX = event.clientX - rect.left;
-    const mouseY = event.clientY - rect.top;
-
-    if (isDraggingCircle && selectedCircle) {
-      // Move the selected circle
-      const deltaX = (mouseX - dragStart.x) / viewState.scale;
-      const deltaY = (mouseY - dragStart.y) / viewState.scale;
-      
-      setCircles(prev => prev.map(circle => 
-        circle.id === selectedCircle 
-          ? { ...circle, x: circle.x + deltaX, y: circle.y + deltaY }
-          : circle
-      ));
-      
-      setDragStart({ x: mouseX, y: mouseY });
-    } else if (isResizingCircle && selectedCircle) {
-      // Resize the selected circle
-      const selectedCircleData = circles.find(c => c.id === selectedCircle);
-      if (selectedCircleData) {
-        const circleX = viewState.offsetX + selectedCircleData.x * viewState.scale;
-        const currentDistance = Math.sqrt((mouseX - circleX) ** 2 + (mouseY - (viewState.offsetY + selectedCircleData.y * viewState.scale)) ** 2);
-        const newRadius = Math.max(10, Math.min(50, currentDistance / viewState.scale));
-        
-        setCircles(prev => prev.map(circle => 
-          circle.id === selectedCircle 
-            ? { ...circle, radius: newRadius }
-            : circle
-        ));
-      }
-    } else if (isDragging) {
-      // Pan the view
+    if (isDragging) {
       setViewState(prev => ({
         ...prev,
         offsetX: event.clientX - dragStart.x,
@@ -307,8 +182,6 @@ export const PhotoEditor = ({ puzzle, onSave }: PhotoEditorProps) => {
   // Handle mouse up
   const handleMouseUp = () => {
     setIsDragging(false);
-    setIsDraggingCircle(false);
-    setIsResizingCircle(false);
   };
 
   // Handle wheel for zooming
@@ -384,20 +257,15 @@ export const PhotoEditor = ({ puzzle, onSave }: PhotoEditorProps) => {
           <Button onClick={handleZoomOut} size="sm" variant="outline">
             <ZoomOut className="h-4 w-4" />
           </Button>
-            <Button onClick={handleReset} size="sm" variant="outline">
-              <RotateCcw className="h-4 w-4" />
+          <Button onClick={handleReset} size="sm" variant="outline">
+            <RotateCcw className="h-4 w-4" />
+          </Button>
+          {selectedCircle && (
+            <Button onClick={handleDeleteSelected} size="sm" variant="destructive">
+              Delete Selected
             </Button>
-            {selectedCircle && (
-              <>
-                <Button onClick={handleDeleteSelected} size="sm" variant="destructive">
-                  Delete Selected
-                </Button>
-                <div className="text-xs text-muted-foreground">
-                  Drag to move • Drag handle to resize
-                </div>
-              </>
-            )}
-            <div className="flex-1" />
+          )}
+          <div className="flex-1" />
           <div className="text-sm text-muted-foreground">
             Holds: {circles.length} | Zoom: {Math.round(viewState.scale * 100)}%
           </div>
@@ -436,11 +304,9 @@ export const PhotoEditor = ({ puzzle, onSave }: PhotoEditorProps) => {
         <CardContent className="p-4">
           <div className="text-sm text-muted-foreground space-y-1">
             <p><strong>Click</strong> to add/select holds</p>
-            <p><strong>Drag selected hold</strong> to move it</p>
-            <p><strong>Drag white handle</strong> to resize selected hold</p>
             <p><strong>Right-click + drag</strong> or <strong>Ctrl + drag</strong> to pan</p>
             <p><strong>Scroll</strong> to zoom in/out</p>
-            <p><strong>Selected hold</strong> appears in orange with dashed outline</p>
+            <p><strong>Selected hold</strong> appears in orange</p>
           </div>
         </CardContent>
       </Card>
